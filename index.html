@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AnatoRipasso</title>
+<style>
+  :root { --bg:#0f172a; --card:#1e293b; --txt:#f1f5f9; --acc:#38bdf8; --ok:#22c55e; --ko:#ef4444; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:system-ui,sans-serif; background:var(--bg); color:var(--txt); }
+  .wrap { max-width:640px; margin:0 auto; padding:16px; }
+  h1 { margin:0 0 8px; font-size:1.4rem; }
+  .stats { display:flex; gap:8px; margin-bottom:12px; font-size:.9rem; }
+  .stats div { background:var(--card); padding:6px 10px; border-radius:8px; flex:1; text-align:center; }
+  .tabs { display:flex; gap:8px; margin-bottom:12px; }
+  button { font:inherit; border:0; border-radius:10px; padding:12px; cursor:pointer;
+           background:var(--card); color:var(--txt); }
+  button:hover { filter:brightness(1.2); }
+  .tabs button { flex:1; }
+  .tabs button.on { background:var(--acc); color:#0f172a; font-weight:600; }
+  .box { background:var(--card); border-radius:14px; padding:20px; min-height:140px; }
+  .tag { font-size:.75rem; color:var(--acc); margin-bottom:8px; }
+  .q { font-size:1.15rem; margin-bottom:12px; }
+  .a { color:var(--ok); margin-top:12px; }
+  .row { display:flex; gap:8px; margin-top:12px; }
+  .row button { flex:1; }
+  .opt { display:block; width:100%; margin-top:8px; text-align:left; }
+  .good { background:var(--ok)!important; color:#0f172a; }
+  .bad { background:var(--ko)!important; }
+  select { background:var(--card); color:var(--txt); border:0; border-radius:8px; padding:6px; }
+  .small { font-size:.8rem; opacity:.7; margin-top:12px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>AnatoRipasso</h1>
+  <div class="stats">
+    <div>⭐ <span id="pts">0</span> punti</div>
+    <div>🏅 Livello <span id="lvl">1</span></div>
+    <div>🔥 Serie <span id="streak">0</span> g</div>
+  </div>
+  <div class="tabs">
+    <button id="t1" class="on">Flashcard</button>
+    <button id="t2">Quiz</button>
+  </div>
+  <div style="margin-bottom:10px">
+    Difficoltà:
+    <select id="diff">
+      <option value="0">Tutte</option><option value="1">1</option>
+      <option value="2">2</option><option value="3">3</option>
+    </select>
+  </div>
+  <div class="box" id="box"></div>
+  <div class="small">Materiale didattico: verificare sempre sul testo di riferimento.</div>
+</div>
+
+<script>
+// ====== CONTENUTI: qui aggiungerete le vostre schede ======
+const CARDS = [
+ {id:1, topic:"Arto superiore", d:1, q:"Quale nervo innerva il muscolo bicipite brachiale?", a:"Nervo muscolocutaneo (C5-C6)"},
+ {id:2, topic:"Arto superiore", d:1, q:"Qual è l'osso del carpo più frequentemente fratturato?", a:"Lo scafoide"},
+ {id:3, topic:"Arto superiore", d:2, q:"Quali sono i quattro muscoli della cuffia dei rotatori?", a:"Sovraspinato, sottospinato, piccolo rotondo, sottoscapolare"},
+ {id:4, topic:"Arto superiore", d:2, q:"Quale muscolo dà il via all'abduzione della spalla (primi 0°-15°)?", a:"Il sovraspinato; poi il deltoide diventa il principale abduttore"},
+ {id:5, topic:"Arto superiore", d:2, q:"Quale nervo è a rischio nelle fratture del collo chirurgico dell'omero?", a:"Il nervo ascellare"},
+ {id:6, topic:"Arto superiore", d:2, q:"Quali muscoli innerva il nervo ascellare?", a:"Deltoide e piccolo rotondo"},
+ {id:7, topic:"Arto superiore", d:3, q:"Quali sono i limiti dello spazio quadrilatero?", a:"Sopra: piccolo rotondo; sotto: grande rotondo; medialmente: capo lungo del tricipite; lateralmente: collo chirurgico dell'omero"},
+ {id:8, topic:"Arto superiore", d:3, q:"Quali tendini delimitano la tabacchiera anatomica?", a:"Ulnare: estensore lungo del pollice. Radiale: estensore breve del pollice e abduttore lungo del pollice"},
+ {id:9, topic:"Arto superiore", d:3, q:"Quali ossa formano il pavimento della tabacchiera anatomica e quale arteria la attraversa?", a:"Scafoide e trapezio; arteria radiale"},
+ {id:10, topic:"Arto superiore", d:1, q:"Quale nervo passa nel tunnel carpale?", a:"Il nervo mediano"}
+];
+
+// ====== SALVATAGGIO (nel browser) ======
+const KEY = "anatoripasso_v1";
+let S = JSON.parse(localStorage.getItem(KEY) || "null") ||
+        {points:0, streak:0, lastDay:"", cards:{}};
+const save = () => localStorage.setItem(KEY, JSON.stringify(S));
+const $ = id => document.getElementById(id);
+const INTERVALS_MIN = [0, 1440, 2880, 5760, 11520, 23040]; // minuti per scatola 0..5
+
+function today() { return new Date().toISOString().slice(0,10); }
+
+function addPoints(n) {
+  S.points += n;
+  const t = today();
+  if (S.lastDay !== t) {
+    const y = new Date(Date.now() - 864e5).toISOString().slice(0,10);
+    S.streak = (S.lastDay === y) ? S.streak + 1 : 1;
+    S.lastDay = t;
+  }
+  save(); stats();
+}
+function stats() {
+  $("pts").textContent = S.points;
+  $("lvl").textContent = Math.floor(S.points / 100) + 1;
+  $("streak").textContent = S.streak;
+}
+
+// ====== LOGICA RIPASSO ======
+function filtered() {
+  const d = +$("diff").value;
+  return CARDS.filter(c => d === 0 || c.d === d);
+}
+function pickDue() {
+  const now = Date.now();
+  const list = filtered();
+  const due = list.filter(c => (S.cards[c.id]?.due || 0) <= now);
+  const pool = due.length ? due : null;
+  if (!pool) return null;
+  return pool[Math.floor(Math.random() * pool.length)];
+}
+function grade(card, ok) {
+  const st = S.cards[card.id] || {box:0, due:0};
+  st.box = ok ? Math.min(5, st.box + 1) : 0;
+  st.due = Date.now() + INTERVALS_MIN[st.box] * 60000;
+  S.cards[card.id] = st;
+  addPoints(ok ? 5 * card.d : 1);
+}
+
+// ====== SCHERMATE ======
+let mode = "flash";
+function el(tag, cls, text) {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (text) e.textContent = text;
+  return e;
+}
+
+function showFlash() {
+  const box = $("box"); box.innerHTML = "";
+  const c = pickDue();
+  if (!c) { box.append(el("div","q","🎉 Hai finito il ripasso per ora! Torna più tardi o prova il Quiz.")); return; }
+  box.append(el("div","tag", c.topic + " · difficoltà " + c.d));
+  box.append(el("div","q", c.q));
+  const show = el("button", "", "Mostra risposta");
+  show.onclick = () => {
+    show.remove();
+    box.append(el("div","a", c.a));
+    const row = el("div","row");
+    const ko = el("button","bad","❌ Non la sapevo");
+    const ok = el("button","good","✅ La sapevo");
+    ko.onclick = () => { grade(c,false); showFlash(); };
+    ok.onclick = () => { grade(c,true); showFlash(); };
+    row.append(ko, ok); box.append(row);
+  };
+  box.append(show);
+}
+
+function showQuiz() {
+  const box = $("box"); box.innerHTML = "";
+  const list = filtered();
+  if (list.length < 4) { box.append(el("div","q","Servono almeno 4 schede per questo filtro.")); return; }
+  const c = list[Math.floor(Math.random() * list.length)];
+  const wrong = CARDS.filter(x => x.id !== c.id).sort(() => Math.random() - .5).slice(0,3);
+  const opts = [c, ...wrong].sort(() => Math.random() - .5);
+  box.append(el("div","tag", c.topic + " · difficoltà " + c.d));
+  box.append(el("div","q", c.q));
+  let done = false;
+  opts.forEach(o => {
+    const b = el("button","opt", o.a);
+    b.onclick = () => {
+      if (done) return; done = true;
+      const ok = o.id === c.id;
+      b.classList.add(ok ? "good" : "bad");
+      if (!ok) [...box.querySelectorAll(".opt")].find(x => x.textContent === c.a).classList.add("good");
+      addPoints(ok ? 10 * c.d : 0);
+      const next = el("button","", "Prossima domanda ➡️");
+      next.style.marginTop = "12px";
+      next.onclick = showQuiz;
+      box.append(next);
+    };
+    box.append(b);
+  });
+}
+
+function render() { mode === "flash" ? showFlash() : showQuiz(); }
+$("t1").onclick = () => { mode="flash"; $("t1").className="on"; $("t2").className=""; render(); };
+$("t2").onclick = () => { mode="quiz"; $("t2").className="on"; $("t1").className=""; render(); };
+$("diff").onchange = render;
+stats(); render();
+</script>
+</body>
+</html>
