@@ -37,13 +37,17 @@
   <div class="stats">
     <div>⭐ <span id="pts">0</span> punti</div>
     <div>🏅 Livello <span id="lvl">1</span></div>
-    <div>🔥 Serie <span id="streak">0</span> g</div>
   </div>
   <div class="tabs">
     <button id="t1" class="on">Flashcard</button>
     <button id="t2">Quiz</button>
   </div>
   <div style="margin-bottom:10px">
+    Argomento:
+    <select id="argomento">
+      <option value="">Tutti</option>
+    </select>
+
     Difficoltà:
     <select id="diff">
       <option value="0">Tutte</option><option value="1">1</option>
@@ -55,38 +59,34 @@
 </div>
 
 <script>
-// ====== CONTENUTI: qui aggiungerete le vostre schede ======
+// ====== LE SCHEDE SONO NEL FILE cards.json ======
 let CARDS = [];
-// ====== SALVATAGGIO (nel browser) ======
+
+// ====== SALVATAGGIO NEL BROWSER ======
 const KEY = "anatoripasso_v1";
 let S = JSON.parse(localStorage.getItem(KEY) || "null") ||
-        {points:0, streak:0, lastDay:"", cards:{}};
+        {points:0, cards:{}};
 const save = () => localStorage.setItem(KEY, JSON.stringify(S));
 const $ = id => document.getElementById(id);
 const INTERVALS_MIN = [0, 1440, 2880, 5760, 11520, 23040]; // minuti per scatola 0..5
 
-function today() { return new Date().toISOString().slice(0,10); }
-
 function addPoints(n) {
   S.points += n;
-  const t = today();
-  if (S.lastDay !== t) {
-    const y = new Date(Date.now() - 864e5).toISOString().slice(0,10);
-    S.streak = (S.lastDay === y) ? S.streak + 1 : 1;
-    S.lastDay = t;
-  }
   save(); stats();
 }
 function stats() {
   $("pts").textContent = S.points;
   $("lvl").textContent = Math.floor(S.points / 100) + 1;
-  $("streak").textContent = S.streak;
 }
 
-// ====== LOGICA RIPASSO ======
+// ====== RIPASSO E FILTRI ======
 function filtered() {
   const d = +$("diff").value;
-  return CARDS.filter(c => d === 0 || c.d === d);
+  const arg = $("argomento").value;
+  return CARDS.filter(c =>
+    (d === 0 || c.d === d) &&
+    (arg === "" || c.topic === arg)
+  );
 }
 function pickDue() {
   const now = Date.now();
@@ -111,6 +111,18 @@ function el(tag, cls, text) {
   if (cls) e.className = cls;
   if (text) e.textContent = text;
   return e;
+}
+
+function aggiornaArgomenti() {
+  const argomenti = [...new Set(CARDS.map(c => c.topic))].sort();
+  const menu = $("argomento");
+  menu.innerHTML = '<option value="">Tutti</option>';
+  argomenti.forEach(a => {
+    const o = document.createElement("option");
+    o.value = a;
+    o.textContent = a;
+    menu.append(o);
+  });
 }
 
 function showFlash() {
@@ -163,10 +175,18 @@ function showQuiz() {
 function render() { mode === "flash" ? showFlash() : showQuiz(); }
 $("t1").onclick = () => { mode="flash"; $("t1").className="on"; $("t2").className=""; render(); };
 $("t2").onclick = () => { mode="quiz"; $("t2").className="on"; $("t1").className=""; render(); };
+$("argomento").addEventListener("change", render);
 $("diff").onchange = render;
+
+// ====== CARICAMENTO DELLE SCHEDE ======
 fetch("cards.json?v=" + Date.now())
   .then(r => r.json())
-  .then(d => { CARDS = d; stats(); render(); })
+  .then(d => {
+    CARDS = d;
+    aggiornaArgomenti();
+    stats();
+    render();
+  })
   .catch(() => { $("box").textContent = "Errore nel caricamento delle schede."; });
 </script>
 </body>
