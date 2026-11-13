@@ -56,6 +56,7 @@
     <div class="menu">
       <button id="m1">🃏 Flashcard<small>Ripasso con ripetizione spaziata</small></button>
       <button id="m2">🎯 Quiz<small>Risposta multipla a tempo libero</small></button>
+      <button id="m3">🔁 Sbagliate<small>Recupera e ripassa le schede sbagliate</small></button>
     </div>
   </div>
 
@@ -67,8 +68,9 @@
     </div>
 
     <div class="tabs">
-      <button id="t1" class="on">Flashcard</button>
+      <button id="t1">Flashcard</button>
       <button id="t2">Quiz</button>
+      <button id="t3">Sbagliate</button>
     </div>
 
     <div style="margin-bottom:10px">
@@ -92,7 +94,7 @@
 let CARDS = [];
 
 // ====== SALVATAGGIO NEL BROWSER ======
-const KEY = "anatoripasso_v1";
+const KEY = "anatoripasso_v2";
 let S = JSON.parse(localStorage.getItem(KEY) || "null") || {points:0, cards:{}};
 const save = () => localStorage.setItem(KEY, JSON.stringify(S));
 const $ = id => document.getElementById(id);
@@ -121,10 +123,16 @@ function pickDue() {
   if (!pool) return null;
   return pool[Math.floor(Math.random() * pool.length)];
 }
+function pickSbagliata() {
+  const list = filtered().filter(c => S.cards[c.id]?.sbagliata);
+  if (!list.length) return null;
+  return list[Math.floor(Math.random() * list.length)];
+}
 function grade(card, ok) {
-  const st = S.cards[card.id] || {box:0, due:0};
+  const st = S.cards[card.id] || {box:0, due:0, sbagliata:false};
   st.box = ok ? Math.min(5, st.box + 1) : 0;
   st.due = Date.now() + INTERVALS_MIN[st.box] * 60000;
+  st.sbagliata = !ok;
   S.cards[card.id] = st;
   addPoints(ok ? 5 * card.d : 1);
 }
@@ -138,9 +146,10 @@ function apriEsercizi(tipo) {
   mode = tipo;
   $("home").classList.add("hidden");
   $("esercizi").classList.remove("hidden");
-  $("titolo").textContent = tipo === "flash" ? "Flashcard" : "Quiz";
+  $("titolo").textContent = {flash:"Flashcard", quiz:"Quiz", sbagliate:"Sbagliate"}[tipo];
   $("t1").className = tipo === "flash" ? "on" : "";
   $("t2").className = tipo === "quiz" ? "on" : "";
+  $("t3").className = tipo === "sbagliate" ? "on" : "";
   render();
 }
 
@@ -200,7 +209,7 @@ function showQuiz() {
       const ok = o.id === c.id;
       b.classList.add(ok ? "good" : "bad");
       if (!ok) [...box.querySelectorAll(".opt")].find(x => x.textContent === c.a).classList.add("good");
-      addPoints(ok ? 10 * c.d : 0);
+      grade(c, ok);
       const next = el("button","", "Prossima domanda ➡️");
       next.style.marginTop = "12px";
       next.onclick = showQuiz;
@@ -210,13 +219,42 @@ function showQuiz() {
   });
 }
 
-function render() { mode === "flash" ? showFlash() : showQuiz(); }
+function showSbagliate() {
+  const box = $("box"); box.innerHTML = "";
+  const c = pickSbagliata();
+  if (!c) {
+    box.append(el("div","q","🎉 Non hai schede segnate come sbagliate in questo filtro."));
+    return;
+  }
+  box.append(el("div","tag", c.topic + " · difficoltà " + c.d));
+  box.append(el("div","q", c.q));
+  const show = el("button", "", "Mostra risposta");
+  show.onclick = () => {
+    show.remove();
+    box.append(el("div","a", c.a));
+    const row = el("div","row");
+    const ko = el("button","bad","❌ Ancora non la sapevo");
+    const ok = el("button","good","✅ Ora la sapevo");
+    ko.onclick = () => { grade(c,false); showSbagliate(); };
+    ok.onclick = () => { grade(c,true); showSbagliate(); };
+    row.append(ko, ok); box.append(row);
+  };
+  box.append(show);
+}
+
+function render() {
+  if (mode === "flash") showFlash();
+  else if (mode === "quiz") showQuiz();
+  else showSbagliate();
+}
 
 $("m1").onclick = () => apriEsercizi("flash");
 $("m2").onclick = () => apriEsercizi("quiz");
+$("m3").onclick = () => apriEsercizi("sbagliate");
 $("indietro").onclick = apriHome;
 $("t1").onclick = () => apriEsercizi("flash");
 $("t2").onclick = () => apriEsercizi("quiz");
+$("t3").onclick = () => apriEsercizi("sbagliate");
 $("argomento").addEventListener("change", render);
 $("diff").onchange = render;
 
