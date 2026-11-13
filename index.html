@@ -9,9 +9,16 @@
   * { box-sizing:border-box; }
   body { margin:0; font-family:system-ui,sans-serif; background:var(--bg); color:var(--txt); }
   .wrap { max-width:640px; margin:0 auto; padding:16px; }
-  h1 { margin:0 0 8px; font-size:1.4rem; }
-  .stats { display:flex; gap:8px; margin-bottom:12px; font-size:.9rem; }
-  .stats div { background:var(--card); padding:6px 10px; border-radius:8px; flex:1; text-align:center; }
+  h1 { margin:0 0 8px; font-size:1.5rem; }
+  .sub { opacity:.8; margin-bottom:16px; }
+  .stats { display:flex; gap:8px; margin-bottom:16px; }
+  .stats div { background:var(--card); padding:10px; border-radius:12px; flex:1; text-align:center; }
+  .big { font-size:1.4rem; font-weight:700; color:var(--acc); }
+  .menu { display:grid; gap:10px; }
+  .menu button { text-align:left; padding:16px; border-radius:14px; font-size:1.05rem; }
+  .menu button small { display:block; opacity:.75; font-weight:400; margin-top:4px; }
+  .top { display:flex; align-items:center; gap:10px; margin-bottom:14px; }
+  .back { padding:8px 12px; border-radius:10px; }
   .tabs { display:flex; gap:8px; margin-bottom:12px; }
   button { font:inherit; border:0; border-radius:10px; padding:12px; cursor:pointer;
            background:var(--card); color:var(--txt); }
@@ -29,33 +36,55 @@
   .bad { background:var(--ko)!important; }
   select { background:var(--card); color:var(--txt); border:0; border-radius:8px; padding:6px; }
   .small { font-size:.8rem; opacity:.7; margin-top:12px; }
+  .hidden { display:none; }
 </style>
 </head>
 <body>
 <div class="wrap">
-  <h1>AnatoRipasso</h1>
-  <div class="stats">
-    <div>⭐ <span id="pts">0</span> punti</div>
-    <div>🏅 Livello <span id="lvl">1</span></div>
-  </div>
-  <div class="tabs">
-    <button id="t1" class="on">Flashcard</button>
-    <button id="t2">Quiz</button>
-  </div>
-  <div style="margin-bottom:10px">
-    Argomento:
-    <select id="argomento">
-      <option value="">Tutti</option>
-    </select>
 
-    Difficoltà:
-    <select id="diff">
-      <option value="0">Tutte</option><option value="1">1</option>
-      <option value="2">2</option><option value="3">3</option>
-    </select>
+  <!-- ===== HOME ===== -->
+  <div id="home">
+    <h1>AnatoRipasso</h1>
+    <div class="sub">Ripassa anatomia con flashcard e quiz.</div>
+
+    <div class="stats">
+      <div>⭐ <span class="big" id="pts">0</span><br>Punti</div>
+      <div>🏅 <span class="big" id="lvl">1</span><br>Livello</div>
+      <div>📚 <span class="big" id="tot">0</span><br>Schede</div>
+    </div>
+
+    <div class="menu">
+      <button id="m1">🃏 Flashcard<small>Ripasso con ripetizione spaziata</small></button>
+      <button id="m2">🎯 Quiz<small>Risposta multipla a tempo libero</small></button>
+    </div>
   </div>
-  <div class="box" id="box"></div>
-  <div class="small">Materiale didattico: verificare sempre sul testo di riferimento.</div>
+
+  <!-- ===== ESERCIZI ===== -->
+  <div id="esercizi" class="hidden">
+    <div class="top">
+      <button class="back" id="indietro">← Home</button>
+      <h1 id="titolo">Flashcard</h1>
+    </div>
+
+    <div class="tabs">
+      <button id="t1" class="on">Flashcard</button>
+      <button id="t2">Quiz</button>
+    </div>
+
+    <div style="margin-bottom:10px">
+      Argomento:
+      <select id="argomento"><option value="">Tutti</option></select>
+
+      Difficoltà:
+      <select id="diff">
+        <option value="0">Tutte</option><option value="1">1</option>
+        <option value="2">2</option><option value="3">3</option>
+      </select>
+    </div>
+
+    <div class="box" id="box"></div>
+    <div class="small">Materiale didattico: verificare sempre sul testo di riferimento.</div>
+  </div>
 </div>
 
 <script>
@@ -64,19 +93,16 @@ let CARDS = [];
 
 // ====== SALVATAGGIO NEL BROWSER ======
 const KEY = "anatoripasso_v1";
-let S = JSON.parse(localStorage.getItem(KEY) || "null") ||
-        {points:0, cards:{}};
+let S = JSON.parse(localStorage.getItem(KEY) || "null") || {points:0, cards:{}};
 const save = () => localStorage.setItem(KEY, JSON.stringify(S));
 const $ = id => document.getElementById(id);
-const INTERVALS_MIN = [0, 1440, 2880, 5760, 11520, 23040]; // minuti per scatola 0..5
+const INTERVALS_MIN = [0, 1440, 2880, 5760, 11520, 23040];
 
-function addPoints(n) {
-  S.points += n;
-  save(); stats();
-}
+function addPoints(n) { S.points += n; save(); stats(); }
 function stats() {
   $("pts").textContent = S.points;
   $("lvl").textContent = Math.floor(S.points / 100) + 1;
+  $("tot").textContent = CARDS.length;
 }
 
 // ====== RIPASSO E FILTRI ======
@@ -84,8 +110,7 @@ function filtered() {
   const d = +$("diff").value;
   const arg = $("argomento").value;
   return CARDS.filter(c =>
-    (d === 0 || c.d === d) &&
-    (arg === "" || c.topic === arg)
+    (d === 0 || c.d === d) && (arg === "" || c.topic === arg)
   );
 }
 function pickDue() {
@@ -104,6 +129,21 @@ function grade(card, ok) {
   addPoints(ok ? 5 * card.d : 1);
 }
 
+// ====== NAVIGAZIONE ======
+function apriHome() {
+  $("home").classList.remove("hidden");
+  $("esercizi").classList.add("hidden");
+}
+function apriEsercizi(tipo) {
+  mode = tipo;
+  $("home").classList.add("hidden");
+  $("esercizi").classList.remove("hidden");
+  $("titolo").textContent = tipo === "flash" ? "Flashcard" : "Quiz";
+  $("t1").className = tipo === "flash" ? "on" : "";
+  $("t2").className = tipo === "quiz" ? "on" : "";
+  render();
+}
+
 // ====== SCHERMATE ======
 let mode = "flash";
 function el(tag, cls, text) {
@@ -119,9 +159,7 @@ function aggiornaArgomenti() {
   menu.innerHTML = '<option value="">Tutti</option>';
   argomenti.forEach(a => {
     const o = document.createElement("option");
-    o.value = a;
-    o.textContent = a;
-    menu.append(o);
+    o.value = a; o.textContent = a; menu.append(o);
   });
 }
 
@@ -173,8 +211,12 @@ function showQuiz() {
 }
 
 function render() { mode === "flash" ? showFlash() : showQuiz(); }
-$("t1").onclick = () => { mode="flash"; $("t1").className="on"; $("t2").className=""; render(); };
-$("t2").onclick = () => { mode="quiz"; $("t2").className="on"; $("t1").className=""; render(); };
+
+$("m1").onclick = () => apriEsercizi("flash");
+$("m2").onclick = () => apriEsercizi("quiz");
+$("indietro").onclick = apriHome;
+$("t1").onclick = () => apriEsercizi("flash");
+$("t2").onclick = () => apriEsercizi("quiz");
 $("argomento").addEventListener("change", render);
 $("diff").onchange = render;
 
